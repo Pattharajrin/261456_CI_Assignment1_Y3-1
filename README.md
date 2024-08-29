@@ -4,7 +4,7 @@
 # 261456 - INTRO COMP INTEL FOR CPE
 
 
-Due Date 1 สิงหาคม 2567 เวลา 23.00 น.
+Due Date 29 สิงหาคม 2567 เวลา 23.00 น.
 
 ส่งเป็น pdf file ผ่านระบบที่ exam.cmu.ac.th เท่านั้น ห้ามส่งเป็น e-mail หรือเป็นกระดาษ
 
