@@ -84,12 +84,11 @@ def Forward_Propagation(x, parameters, hidden_layers):
 
 # ฟังก์ชันคำนวณค่า Mean Squared Error (MSE) loss
 def MSE_Loss(Y, AL):
-    return (np.mean((Y - AL))**2)  # คำนวณ MSE ระหว่างค่าจริง (Y) กับค่าที่ทำนายได้ (AL)
+    return np.mean((Y - AL)**2)  # คำนวณ MSE ระหว่างค่าจริง (Y) กับค่าที่ทำนายได้ (AL)
 
 # ฟังก์ชันคำนวณค่าเปอร์เซ็นต์ความสูญเสีย
 def Percentage_Loss(Y, AL):
     return np.mean(np.abs((Y - AL) / Y)) * 100  # คำนวณเปอร์เซ็นต์ความสูญเสียระหว่างค่าจริงกับค่าที่ทำนาย
-
 
 def Backward_Propagation(X, Y, parameters, caches, hidden_layers):
     grads = {}  # สร้างดิกชันนารีเพื่อเก็บค่าเกรดต่างๆ
@@ -137,116 +136,101 @@ def Update_Parameters(parameters, grads, velocity, learning_rate, momentum_rate)
 
 def Train_MLP(X, Y, hidden_layers, epochs, learning_rate, momentum_rate, X_test, Y_test):
     input_dim = X.shape[1]  # จำนวนฟีเจอร์ในข้อมูลอินพุต
-    output_dim = Y.shape[1]  # จำนวนฟีเจอร์ในข้อมูลเอาต์พุต
-    parameters = Initialize_Parameters(input_dim, hidden_layers, output_dim)  # เริ่มต้นพารามิเตอร์ของโมเดล
-    velocity = Initialize_Velocity(parameters)  # เริ่มต้นค่า velocity
+    output_dim = Y.shape[1]  # จำนวนฟีเจอร์ในข้อมูลเอาท์พุต
+    parameters = Initialize_Parameters(input_dim, hidden_layers, output_dim)  # สุ่มค่าพารามิเตอร์
+    velocity = Initialize_Velocity(parameters)  # สุ่มค่าเทอมความเร็ว
+    loss_per_epoch = []  # เก็บค่า loss ต่อ epoch
+    percentage_loss_per_epoch = []  # เก็บค่าเปอร์เซ็นต์ loss ต่อ epoch
     
-    epoch_losses = []  # รายการสำหรับเก็บค่า loss ในแต่ละยุค
-    
-    for epoch in range(epochs):  # วนลูปผ่านจำนวนยุคที่กำหนด
-        AL, caches = Forward_Propagation(X, parameters, hidden_layers)  # คำนวณ forward propagation
-        loss = MSE_Loss(Y, AL)  # คำนวณค่า Mean Squared Error (MSE) loss
-        percent_loss = Percentage_Loss(Y, AL)  # คำนวณเปอร์เซ็นต์ความสูญเสีย
-        grads = Backward_Propagation(X, Y, parameters, caches, hidden_layers)  # คำนวณ gradients
+    for epoch in range(epochs):
+        AL, caches = Forward_Propagation(X, parameters, hidden_layers)  # ทำ Forward Propagation
+        loss = MSE_Loss(Y, AL)  # คำนวณค่า loss
+        percentage_loss = Percentage_Loss(Y, AL)  # คำนวณค่าเปอร์เซ็นต์ loss
+        loss_per_epoch.append(loss)  # เก็บค่า loss ต่อ epoch
+        percentage_loss_per_epoch.append(percentage_loss)  # เก็บค่าเปอร์เซ็นต์ loss ต่อ epoch
+        grads = Backward_Propagation(X, Y, parameters, caches, hidden_layers)  # ทำ Backward Propagation
         parameters, velocity = Update_Parameters(parameters, grads, velocity, learning_rate, momentum_rate)  # อัปเดตพารามิเตอร์
         
-        # ประเมินโมเดลด้วยชุดข้อมูลทดสอบ
-        AL_test, _ = Forward_Propagation(X_test, parameters, hidden_layers)  # คำนวณ forward propagation สำหรับชุดข้อมูลทดสอบ
-        test_loss = MSE_Loss(Y_test, AL_test)  # คำนวณค่า loss สำหรับชุดข้อมูลทดสอบ
-        epoch_losses.append(test_loss)  # เก็บค่า loss ของชุดข้อมูลทดสอบในแต่ละยุค
-        
-        # แสดงผลการฝึกในแต่ละยุค
-        if epoch % 10 == 0:  # แสดงผลทุก ๆ 10 ยุค
-            print(f"Epoch {epoch}, Loss: {loss:.4f}, Test Loss: {test_loss:.4f}, Percent Loss: {percent_loss:.2f}%")
+        if epoch % 100 == 0 or epoch == epochs - 1:  # แสดงผลลัพธ์ทุก ๆ 100 epochs หรือเมื่อถึง epoch สุดท้าย
+            print(f"Epoch {epoch+1}/{epochs} - Loss: {loss} - Percentage Loss: {percentage_loss}%")
     
-    return parameters, epoch_losses  # คืนค่าพารามิเตอร์และค่า loss ในแต่ละยุค
+    # ทำนายค่าและคำนวณ loss สำหรับชุดทดสอบ
+    Y_pred_test, _ = Forward_Propagation(X_test, parameters, hidden_layers)
+    test_loss = MSE_Loss(Y_test, Y_pred_test)
+    test_percentage_loss = Percentage_Loss(Y_test, Y_pred_test)
+    print(f"Test Loss: {test_loss} - Test Percentage Loss: {test_percentage_loss}%")
+    
+    return loss_per_epoch, percentage_loss_per_epoch, parameters
 
-def K_Fold_Cross_Validation(X, Y, K=10):
-    fold_size = len(X) // K  # ขนาดของแต่ละ fold
-    indices = np.random.permutation(len(X))  # สุ่มลำดับของข้อมูล
+# ฟังก์ชันสำหรับการทำ K-Fold Cross Validation
+import numpy as np
+import matplotlib.pyplot as plt
 
-    fold_losses = []  # รายการสำหรับเก็บค่า loss ในแต่ละ fold
-    fold_scores = []  # รายการสำหรับเก็บค่า scores ในแต่ละ fold
-    final_parameters = None
-    final_loss = None
-    final_percent_loss = None
-    last_X_train, last_Y_train, last_X_test, last_Y_test = None, None, None, None
+# Other functions (Read_Flood_data, Normalize, Sigmoid, etc.) remain unchanged
 
-    for i in range(K):
-        start, end = i * fold_size, (i + 1) * fold_size
-        test_indices = indices[start:end]  # ดัชนีสำหรับชุดทดสอบ
-        train_indices = np.concatenate((indices[:start], indices[end:]))  # ดัชนีสำหรับชุดฝึก
+# Function for K-Fold Cross Validation
+def KFold_CrossValidation(X, Y, hidden_layers, epochs, learning_rate, momentum_rate, K=10):
+    fold_size = X.shape[0] // K  # ขนาดของแต่ละ fold
+    losses = []  # เก็บค่า loss ของแต่ละ fold
+    percentage_losses = []  # เก็บค่าเปอร์เซ็นต์ loss ของแต่ละ fold
+    fold_scores = []  # เก็บค่า loss ต่อ epoch ของแต่ละ fold
+    
+    for k in range(K):
+        print(f"Fold {k+1}/{K}")
+        start, end = k * fold_size, (k + 1) * fold_size  # กำหนดขอบเขตของ fold ปัจจุบัน
+        X_train = np.concatenate((X[:start], X[end:]), axis=0)  # ข้อมูลฝึกสอน
+        Y_train = np.concatenate((Y[:start], Y[end:]), axis=0)  # ค่าฝึกสอน
+        X_valid = X[start:end]  # ข้อมูลตรวจสอบ
+        Y_valid = Y[start:end]  # ค่าตรวจสอบ
 
-        X_train, Y_train = X[train_indices], Y[train_indices]  # ข้อมูลฝึก
-        X_test, Y_test = X[test_indices], Y[test_indices]  # ข้อมูลทดสอบ
+        loss_per_epoch, percentage_loss_per_epoch, _ = Train_MLP(X_train, Y_train, hidden_layers, epochs, learning_rate, momentum_rate, X_valid, Y_valid)
+        losses.append(loss_per_epoch[-1])  # เก็บค่า loss สุดท้ายของ fold นี้
+        percentage_losses.append(percentage_loss_per_epoch[-1])  # เก็บค่าเปอร์เซ็นต์ loss สุดท้ายของ fold นี้
+        fold_scores.append(loss_per_epoch)  # เก็บ loss ต่อ epoch ของ fold นี้
+    
+    # Plot Test MSE Loss over epochs for each fold
+    plt.figure(figsize=(10, 5))
+    colors = plt.cm.viridis(np.linspace(0, 1, len(fold_scores)))
+    for i, epoch_losses in enumerate(fold_scores):
+        print(f"Fold {i+1} - Epoch Losses Length: {len(epoch_losses)}")
+        plt.plot(range(len(epoch_losses)), epoch_losses, color=colors[i], label=f'Fold {i+1}')
+    plt.xlabel('Epoch')
+    plt.ylabel('Test MSE Loss')
+    plt.title('Test MSE Loss vs Epochs for Each Fold')
+    plt.legend()
+    plt.show()
 
-        # Train the model
-        hidden_layers = [10, 5]  # โครงสร้างของ hidden layers
-        epochs = 100  # จำนวนยุค
-        learning_rate = 0.0001  # อัตราการเรียนรู้
-        momentum_rate = 0.9  # อัตรา momentum
-        parameters, epoch_losses = Train_MLP(X_train, Y_train, hidden_layers, epochs, learning_rate, momentum_rate, X_test, Y_test)
+    # Plot final Test MSE Loss for each fold
+    plt.figure(figsize=(10, 5))
+    plt.bar(range(1, len(losses) + 1), losses, color='skyblue', edgecolor='black')
+    plt.xlabel('Fold')
+    plt.ylabel('Test MSE Loss')
+    plt.title('Test MSE Loss for Each Fold')
+    plt.xticks(range(1, len(losses) + 1))
+    plt.show()
+    
+    return np.mean(losses), np.mean(percentage_losses)  # คืนค่าเฉลี่ยของ loss และเปอร์เซ็นต์ loss
 
-        # Evaluate the model
-        AL_test, _ = Forward_Propagation(X_test, parameters, hidden_layers)  # คำนวณค่า AL สำหรับชุดทดสอบ
-        test_loss = MSE_Loss(Y_test, AL_test)  # คำนวณค่า MSE loss
-        test_percent_loss = Percentage_Loss(Y_test, AL_test)  # คำนวณเปอร์เซ็นต์ความสูญเสีย
+if __name__ == "__main__":
+    input_data, output_data = Read_Flood_data()  # อ่านข้อมูลจากไฟล์
+    input_data, mean, std = Normalize(input_data)  # ทำ Normalization ข้อมูล
 
-        fold_losses.append(test_loss)  # เก็บค่า loss ของ fold นี้
-        fold_scores.append(epoch_losses)  # เก็บค่า scores ของ fold นี้
+    hidden_layers = [8, 5]  # กำหนดจำนวน hidden layers
+    epochs = 1000  # จำนวน epoch
+    learning_rate = 0.01  # Learning rate
+    momentum_rate = 0.9  # Momentum rate
 
-        if i == K - 1:
-            final_parameters = parameters
-            final_loss = test_loss
-            final_percent_loss = test_percent_loss
-            last_X_train, last_Y_train, last_X_test, last_Y_test = X_train, Y_train, X_test, Y_test
+    # ทำ K-Fold Cross Validation
+    mean_loss, mean_percentage_loss = KFold_CrossValidation(input_data, output_data, hidden_layers, epochs, learning_rate, momentum_rate)
+    print(f"Mean Loss: {mean_loss} - Mean Percentage Loss: {mean_percentage_loss}%")
 
-        print(f"Fold {i+1}, Test MSE Loss: {test_loss:.4f}, Test Percent Loss: {test_percent_loss:.2f}%")
+    # Train the final model and get the loss per epoch for plotting
+    loss_per_epoch, percentage_loss_per_epoch, _ = Train_MLP(input_data, output_data, hidden_layers, epochs, learning_rate, momentum_rate, input_data, output_data)
 
-    avg_loss = np.mean(fold_losses)  # ค่าเฉลี่ยของ loss ในทุก fold
-    avg_percent_loss = np.mean([Percentage_Loss(Y_test, Forward_Propagation(X_test, final_parameters, hidden_layers)[0]) for test_indices in fold_losses])  # คำนวณค่าเฉลี่ยเปอร์เซ็นต์ความสูญเสีย
-    print(f"Average Test MSE Loss: {avg_loss:.4f}, Average Test Percent Loss: {avg_percent_loss:.2f}%")
-
-    return final_parameters, final_loss, final_percent_loss, last_X_train, last_Y_train, last_X_test, last_Y_test, fold_scores, fold_losses, avg_loss, avg_percent_loss
-
-X, Y = Read_Flood_data()  # อ่านข้อมูลจากไฟล์
-X_normalized, mean, std = Normalize(X)  # ปรับขนาดข้อมูล
-# Ensure K-Fold returns the correct values
-final_parameters, final_loss, final_percent_loss, last_X_train, last_Y_train, last_X_test, last_Y_test, fold_scores, fold_losses, avg_loss, avg_percent_loss = K_Fold_Cross_Validation(X_normalized, Y, K=10)
-
-# Perform forward propagation using the last training data
-AL_train, _ = Forward_Propagation(last_X_train, final_parameters, [10, 5])  # Calculate predictions for training data
-AL_test, _ = Forward_Propagation(last_X_test, final_parameters, [10, 5])    # Calculate predictions for testing data
-
-# ตรวจสอบค่าที่คำนวณได้
-print("AL_train:", AL_train)
-print("AL_test:", AL_test)
-
-# วาดกราฟผลลัพธ์สำหรับข้อมูลการฝึก
-plt.figure(figsize=(10, 5))
-plt.plot(last_Y_train, label='Real Data (Train)', color='blue')
-plt.plot(AL_train, label='Predicted Data (Train)', color='red')
-plt.legend()
-plt.title(f'Training Data - Final MSE Loss: {final_loss:.7f}, % Loss: {final_percent_loss:.2f}%, AVG Loss: {avg_loss:.2f}, AVG % Loss: {avg_percent_loss:.2f}%')
-plt.show()
-
-# Plot Test MSE Loss over epochs for each fold
-plt.figure(figsize=(10, 5))
-colors = plt.cm.viridis(np.linspace(0, 1, len(fold_scores)))
-for i, epoch_losses in enumerate(fold_scores):
-    print(f"Fold {i+1} - Epoch Losses Length: {len(epoch_losses)}")
-    plt.plot(range(len(epoch_losses)), epoch_losses, color=colors[i], label=f'Fold {i+1}')
-plt.xlabel('Epoch')
-plt.ylabel('Test MSE Loss')
-plt.title('Test MSE Loss vs Epochs for Each Fold')
-plt.legend()
-plt.show()
-
-# Plot final Test MSE Loss for each fold
-plt.figure(figsize=(10, 5))
-plt.bar(range(1, len(fold_losses) + 1), fold_losses, color='skyblue', edgecolor='black')
-plt.xlabel('Fold')
-plt.ylabel('Test MSE Loss')
-plt.title('Test MSE Loss for Each Fold')
-plt.xticks(range(1, len(fold_losses) + 1))
-plt.show()
+    # พล็อตกราฟ Loss ต่อ Epoch
+    plt.plot(loss_per_epoch, label="Training Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Training Loss over Epochs")
+    plt.legend()
+    plt.show()
